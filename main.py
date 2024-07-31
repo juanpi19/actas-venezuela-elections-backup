@@ -1,5 +1,9 @@
 import requests
 import random
+import csv
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import warnings
+warnings.filterwarnings("ignore")
 
 ####################################################
 # APIs endpoints
@@ -7,10 +11,8 @@ import random
 # https://elecciones2024ve.s3.amazonaws.com/AG8A001761_819592_2024-07-29-0001.jpg
 ####################################################
 
-
-# Dictionaries
-venezolano_data_dict = {'nombre': [], 
-                        'apellido': [], 
+venezolano_data_dict = {'nombre_primer': [], 
+                        'apellido_primer': [], 
                         'cedula': [],
                         'estado': [],
                         'municipio': [],
@@ -18,136 +20,84 @@ venezolano_data_dict = {'nombre': [],
                         'centro_votacion': [],
                         'acta_jpg': []}
 
-
 cedula_api_endpoint = "https://gdp.theempire.tech/api/data?cdi=v"
 foto_acta_api_endpoint = "https://elecciones2024ve.s3.amazonaws.com/"
 
 def randomize_cedula_number():
     return random.randint(20000, 30000000)
 
+def fetch_data(cedula):
+    url = cedula_api_endpoint + str(cedula)
+    try:
+        response = requests.get(url, verify=False)
+        if response.status_code == 200:
+            print(f"Cedula {cedula} found")
+            return response.json()
+        else:
+            print(f"Failed to fetch data for cedula {cedula}. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"Error fetching data for cedula {cedula}: {str(e)}")
+    return None
 
-# Centro De Votacion informacion
-# for _ in range(100):
-#     response = requests.get(cedula_api_endpoint + f"{randomize_cedula_number()}")
+def process_data(datos):
+    if datos:
+        try:
+            if datos['acta']['DO_DS_SERIAL'] not in venezolano_data_dict['acta_jpg']:
+                venezolano_data_dict['nombre_primer'].append(datos['Person']['RE_DS_FIRST_NAME'])
+                venezolano_data_dict['apellido_primer'].append(datos['Person']['RE_DS_FIRST_LASTNAME'])
+                venezolano_data_dict['cedula'].append(datos['Person']['RE_CO_FULLID'])
+                venezolano_data_dict['estado'].append(datos['Person']['ST_DS_STATE'])
+                venezolano_data_dict['municipio'].append(datos['Person']['MU_DS_MUN'])
+                venezolano_data_dict['parroquia'].append(datos['Person']['PA_DS_PAR'])
+                venezolano_data_dict['centro_votacion'].append(datos['Person']['PC_DS_CENTER'])
+                venezolano_data_dict['acta_jpg'].append(foto_acta_api_endpoint + f"{datos['acta']['DO_DS_NAME']}") # DO_DS_NAME
+                print(f"Data added: Cedula {datos['Person']['RE_CO_FULLID']}, Acta {datos['acta']['DO_DS_NAME']}")
+            else:
+                print("Centro de votacion ya contado")
+        except KeyError as e:
+            # print(f"KeyError while processing data: {str(e)}")
+            print(f"Data structure: {datos}")
+    else:
+        print("No data to process")
 
-#     # Guardando Data
-#     venezolano_data_dict['nombre'] = 
-#     venezolano_data_dict['apellido'] =
-#     venezolano_data_dict['cedula'] = 
-#     venezolano_data_dict['estado'] = 
-#     venezolano_data_dict['municipio'] = 
-#     venezolano_data_dict['parroquia'] = 
-#     venezolano_data_dict['centro_votacion'] = 
-#     venezolano_data_dict['acta_jpg'] = 
+def save_to_csv(data_dict, filename='venezolano_data.csv'):
+    try:
+        with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(data_dict.keys())  # Write header
+            writer.writerows(zip(*data_dict.values()))  # Write data
+        print(f"Data successfully saved to {filename}")
+    except Exception as e:
+        print(f"Error saving data to CSV: {str(e)}")
 
+def main():
+    cedulas = [randomize_cedula_number() for _ in range(1000)]
+    #print(f"Generated cedulas: {cedulas}")
 
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        n = 0
+        print(n)
+        future_to_cedula = {executor.submit(fetch_data, cedula): cedula for cedula in cedulas}
+        for future in as_completed(future_to_cedula):
+            cedula = future_to_cedula[future]
+            try:
+                datos = future.result()
+                process_data(datos)
+            except Exception as e:
+                print(f"Error processing cedula {cedula}: {str(e)}")
+            print(n)
+            n+=1
 
+    print("Final dictionary content:")
+    for key, value in venezolano_data_dict.items():
+        print(f"{key}: {value}")
 
-# EXAMPLE
+    save_to_csv(venezolano_data_dict)
 
-dict_ = {
-        "Person": {
-            "RE_CO_FULLID": "V25160168",
-            "RE_DS_FIRST_NAME": "JOSE DOMINGO",
-            "RE_DS_SECOND_NAME": "MARIANO",
-            "RE_DS_FIRST_LASTNAME": "HERRERA",
-            "RE_DS_SECOND_LASTNAME": "SOSA",
-            "RE_CD_GENDER": "M",
-            "RE_DT_BIRTHDATE": "1993-05-17T00:00:00.000Z",
-            "RE_CD_STATE": "16",
-            "RE_DS_CNE_ID": "160101004",
-            "RE_NU_TOMO": None,
-            "IT_CD_ROW": 8,
-            "IT_CD_PAGE": 28,
-            "TB_DS_TABLE": 2,
-            "TB_NU_COUNT": 704,
-            "TB_DS_TERM_MIN": "48",
-            "TB_DS_TERM_MAX": "99",
-            "TB_DS_CODE_QR": None,
-            "RE_DS_TERM_ID": 68,
-            "ST_DS_STATE": "EDO. PORTUGUESA",
-            "MU_DS_MUN": "MP. ARAURE",
-            "PA_DS_PAR": "CM. ARAURE",
-            "PC_CO_CNE": "160101004",
-            "PC_DS_CENTER": "UNIDAD EDUCATIVA ESTADAL DON JUAN DE JESUS SOTELDO GOITIA",
-            "PC_DS_ADDRESS": "BARRIO LIMONCITO DERECHA AVENIDA 35. IZQUIERDA AVENIDA 34. FRENTE CALLE 09 AVENIDA 10 CON CALLE 5 BARRIO LIMONCITO ARAURE CASA",
-            "AU_CO_CREATE_USER": "1",
-            "AU_CO_DROP_USER": None,
-            "AU_CO_MODIFY_USER": "1",
-            "AU_DT_CREATE_DATE": "2024-03-10T05:16:53.080Z",
-            "AU_DT_DROP_DATE": None,
-            "AU_DT_MODIFY_DATE": "2024-06-07T04:10:50.743Z"
-        },
-        "acta": {
-            "DO_CD_DOCUMENT": "58347",
-            "DO_DS_NAME": "AG8A001761_819592_2024-07-29-0001.jpg",
-            "DO_DS_BUCKET": "elecciones2024ve",
-            "DO_CD_SESSION": "77d1b1f7-b733-4534-a1e9-50eba19988b0",
-            "DO_CD_TYPE": None,
-            "DO_DS_SERIAL": "AG8A001761",
-            "DO_BO_BOUND": None,
-            "DO_BO_DUPLICATE": None,
-            "DO_BO_AUTO_DETECT": None,
-            "DO_NU_QUALITY": None,
-            "DO_BO_PUBLISH": None,
-            "DO_CD_CHANNEL": 0,
-            "DO_CD_STATE": "16",
-            "DO_CD_MUN": "211",
-            "DO_CD_PAR": "695",
-            "DO_CD_CENTER": "5503",
-            "DO_CO_CNE_CENTER": "160101004",
-            "DO_CD_TABLE": "18552",
-            "DO_NU_TABLE": "2",
-            "DO_CD_PUBLISH": None,
-            "DO_CO_STAGE": "TT",
-            "DO_DT_A1": "2024-07-29T19:58:16.963Z",
-            "DO_DT_P1": None,
-            "DO_DT_P2": None,
-            "DO_DT_RC": None,
-            "AU_DT_TAKE": None,
-            "AU_CO_TAKE": None,
-            "DO_BO_TOTALIZED": None,
-            "DO_CD_SESSION_AUTO": "c4f13686-d924-4242-8f2b-bce7e441a8a0",
-            "DO_BO_MASKED": None,
-            "DO_DS_RAWDATA": None,
-            "DO_BO_MASKED_SESSION": None,
-            "AU_CO_CREATE_USER": "2",
-            "AU_CO_MODIFY_USER": "1",
-            "AU_CO_DROP_USER": None,
-            "AU_DT_CREATE_DATE": "2024-07-29T19:54:51.423Z",
-            "AU_DT_MODIFY_DATE": "2024-07-29T19:58:16.963Z",
-            "AU_DT_DROP_DATE": None
-        }
-    }
+if __name__ == "__main__":
+    main()
 
 
-# print(dict_['acta']['DO_DS_NAME'])
-
-# response = requests.get("https://gdp.theempire.tech/api/data?cdi=v25160168", verify=False)
-# print(response.get_status)
-
-
-# import requests
-
-# url = "https://gdp.theempire.tech/api/data?cdi=v25160168"
-# response = requests.get(url, verify=False)
-
-# if response.status_code == 200:
-#     data = response.json()
-#     print(data)
-# else:
-#     print(f"Failed to retrieve data: {response.status_code}")
-
-
-import requests
-import ssl
-
-url = "https://gdp.theempire.tech/api/data?cdi=v25160168"
-context = ssl.create_default_context()
-context.check_hostname = False
-context.verify_mode = ssl.CERT_NONE
-
-response = requests.get(url, verify=False)
 
 
 
